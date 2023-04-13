@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WASM 压缩文件示例</title>
+</head>
+<body>
+<h1>WASM 压缩文件示例</h1>
+<label for="fileInput">选择要压缩的文件:</label>
+<input type="file" id="fileInput">
+<button onclick="compressFile()">压缩文件</button>
+<a id="downloadLink" style="display: none;"></a>
+
+<script src="wasm_exec.js"></script>
+
+<script>
+    // 加载 wasm 模块
+    async function loadWasmModule() {
+        const go = new Go()
+        const response = await fetch('compress.wasm');
+        const bytes = await response.arrayBuffer();
+        const module = await WebAssembly.instantiate(bytes, go.importObject);
+        return module.exports;
+    }
+
+    // polyfill
+    if (!WebAssembly.instantiateStreaming) {
+        WebAssembly.instantiateStreaming = async (resp, importObject) => {
+            const source = await (await resp).arrayBuffer()
+            return await WebAssembly.instantiate(source, importObject)
+        }
+    }
+
+    function loadWasm(path) {
+        const go = new Go()
+        return new Promise((resolve, reject) => {
+            WebAssembly.instantiateStreaming(fetch(path), go.importObject)
+                .then(result => {
+                    go.run(result.instance)
+                    resolve(result.instance)
+                })
+                .catch(error => {
+                    reject(error)
+                })
+        })
+    }
+
+    // 压缩文件
+    async function compressFile() {
+        // const wasm = await loadWasmModule();
+        const wasm = await loadWasm("compress.wasm");
+
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+
+        // 将文件读取为 ArrayBuffer
+        const reader = new FileReader();
+        reader.readAsArrayBuffer(file);
+        reader.onload = async () => {
+            const fileData = new Uint8Array(reader.result);
+            // const fileData = reader.result;
+            console.log(fileData)
+            // 使用 wasm 模块压缩文件
+            const compressedData = MyCompress(fileData);
+            console.log(compressedData)
+
+            // 创建 Blob 对象
+            const blob = new Blob([compressedData], { type: 'application/octet-stream' });
+
+            // 创建 URL 对象
+            const url = URL.createObjectURL(blob);
+
+            // 设置下载链接
+            const downloadLink = document.getElementById('downloadLink');
+            downloadLink.href = url;
+            downloadLink.download = file.name + '.zip';
+
+            // 触发下载
+            downloadLink.click();
+
+            // 释放 URL 对象
+            URL.revokeObjectURL(url);
+        };
+    }
+</script>
+</body>
+</html>
